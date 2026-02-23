@@ -93,7 +93,7 @@ canvas{
 /* Back button: default (global, fixed) */
 .back-button{
   position:fixed;
-  bottom:22px;
+  bottom:36px;
   right:24px;
   padding:6px 12px;
   font-size:11px;
@@ -302,6 +302,22 @@ canvas{
 
 #enterBtn {
   font-size: var(--button-font);
+}
+
+.copyright{
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-family: 'IBM Plex Mono', monospace;
+  opacity: 0.35;
+  letter-spacing: 0.5px;
+  pointer-events: none;
+  z-index: 5;
+  color: var(--ui-secondary);
+  text-align: center;
+  white-space: nowrap;
 }
 
 /* ===========================
