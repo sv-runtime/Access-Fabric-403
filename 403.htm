@@ -13,16 +13,17 @@
 
 <body>
 <canvas id="matrix"></canvas>
-<div id="introScreen" class="intro-screen">
-  <button id="enterBtn"></button>
-</div>
 
-<div id="inputScreen" class="input-screen">
-  <div class="input-panel">
-    <div class="input-title">ENTER TRACE (4 CHARS)</div>
-    <input id="traceInput" maxlength="4" autocomplete="off" spellcheck="false">
-    <button id="traceSubmit">VERIFY</button>
-    <div id="traceResult" class="input-result"></div>
+<div id="introScreen" class="intro-screen">
+  <div class="region-select">
+    <button class="region-btn" data-region="world">WORLD</button>
+    <button class="region-btn" data-region="nl_only">NETHERLANDS</button>
+    <button class="region-btn" data-region="europe">EUROPE</button>
+    <button class="region-btn" data-region="na">NORTH-AMERICA</button>
+    <button class="region-btn" data-region="sa">SOUTH-AMERICA</button>
+    <button class="region-btn" data-region="africa">AFRICA</button>
+    <button class="region-btn" data-region="asia_pacific">ASIA-PACIFIC</button>
+    <button class="region-btn ghost-btn" data-region="more">MORE THEMES (soon)</button>
   </div>
 </div>
 
@@ -49,6 +50,7 @@
 
 let hasBootedOnce = false;
 let CONFIG = {};
+let ACTIVE_REGION = "world";
 
 let WORLD_SEED;
 let rand;
@@ -105,6 +107,27 @@ if (!CONFIG.GROUP_WEIGHTS) {
 document.body.style.overflow = "auto";
 
 /* ================= CONFIG BINDINGS ================= */
+
+const REGION_MAP = {
+  world: null, // alles
+
+  europe: [
+    "de","fr","nl","it","es","pl","se","no","fi","ch","at","be",
+    "pt","ro","bg","hu","gr","ua","ru","frl","sm"
+  ],
+    
+    nl_only: ["nl"],
+
+  na: ["us","ca"],
+
+  sa: ["br","co","ve","jm"],
+
+  africa: ["za","ng","gh","ke","ma","eg"],
+
+  asia_pacific: [
+    "in","pk","id","jp","kr","cn","il","tr"
+  ]
+};
 
 const GEO_RESTRICTED_COUNTRIES =
   CONFIG.GEO_RESTRICTED_COUNTRIES || [];
@@ -197,7 +220,6 @@ root.style.setProperty(
 
   currentPalette = [theme.primary, theme.secondary, theme.tertiary];
 
-  document.getElementById("enterBtn").style.opacity = "1";
 }
 
 function getThemeForGroup(group){
@@ -382,7 +404,7 @@ generateTitleLogs();
   runTerminal();
 }
 
-const DOMAIN = "https://sterkbijziekte.nl";
+const DOMAIN = "sterkbijziekte.nl";
 const IP_ADDRESS = "2a02:2350:5:10f:804f:7eb:3c1c:131b";
 let VISITOR_IP = "resolving...";
 let HOST_LABEL = "resolving...";
@@ -577,20 +599,38 @@ function getTrafficType(){
   return rand() < 0.75 ? "local" : "external";
 }
 
-function getWeightedGroup() {
-  return pickFromWeights(GROUP_WEIGHTS);
-}
+function pickFromWeights(weightObj) {
 
-function pickFromWeights(weights){
-  const total = Object.values(weights).reduce((a,b)=>a+b,0);
+  const entries = Object.entries(weightObj);
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+
   let r = rand() * total;
 
-  for (const key in weights) {
-    r -= weights[key];
-    if (r <= 0) return key;
+  for (const [key, weight] of entries) {
+    if (r < weight) return key;
+    r -= weight;
   }
 
-  return Object.keys(weights)[0];
+  // fallback
+  return entries[0][0];
+}
+
+function getWeightedGroup() {
+
+  if (!REGION_MAP[ACTIVE_REGION]) {
+    return pickFromWeights(GROUP_WEIGHTS);
+  }
+
+  const allowed = REGION_MAP[ACTIVE_REGION];
+  const filtered = {};
+
+  for (const key of allowed) {
+    if (GROUP_WEIGHTS[key]) {
+      filtered[key] = GROUP_WEIGHTS[key];
+    }
+  }
+
+  return pickFromWeights(filtered);
 }
 
 function getRandomUser() {
@@ -611,8 +651,8 @@ function applyUILanguage(group){
 
   const ui = UI_TEXT[group] || UI_TEXT["us"];
 
-  document.getElementById("enterBtn").textContent = ui.enter;
-  document.getElementById("backBtn").textContent  = ui.back;
+  const backBtn = document.getElementById("backBtn");
+  if (backBtn) backBtn.textContent = ui.back;
 }
 
 function deriveToken(session) {
@@ -660,31 +700,6 @@ function seedAccessLogIfEmpty() {
 }
 
 seedAccessLogIfEmpty();
-
-function renderIntroContent(group){
-
-  const content =
-    CONFIG.INTRO_CONTENT[group] ||
-    CONFIG.INTRO_CONTENT["us"];
-
-  document.getElementById("introTitle").textContent =
-    content.title;
-
-  document.getElementById("introOpening").textContent =
-    content.opening;
-
-  const ul = document.getElementById("introFeatures");
-  ul.innerHTML = "";
-
-  content.features.forEach(f => {
-    const li = document.createElement("li");
-    li.textContent = f;
-    ul.appendChild(li);
-  });
-
-  document.getElementById("introClosing").textContent =
-    content.closing;
-}
 
 // Intro minimal: direct zichtbaar maken
 const intro = document.getElementById("introScreen");
@@ -1865,7 +1880,7 @@ async function runSequence(){
   await sleep(200);
   await typeLine(firstPrompt, `ping ${DOMAIN}`);
 
-  const pingCount = 4;
+  const pingCount = 2 + Math.floor(rand() * 9); 
   const pingLines = [`PING ${DOMAIN} (${IP_ADDRESS}) 56 data bytes`];
   const times = [];
 
@@ -1932,22 +1947,6 @@ pushAccessLog({
 // toon echte tail (laatste 3 regels uit buffer)
 const tailLines = getTailLines();
 await printAccessTail(tailLines);
-
-// ===== COPYRIGHT TYPED =====
-
-const rootPrompt2 = createRootPromptLine();
-await typeLine(rootPrompt2, "cat NOTICE.txt");
-
-const copyrightRow = document.createElement("pre");
-copyrightRow.className = "term-line output";
-copyrightRow.style.opacity = "0.6";
-terminalOutput.appendChild(copyrightRow);
-
-await typeLine(
-  copyrightRow,
-  "© 2026 S. Veenstra. All rights reserved",
-  18
-);
 
 // nieuwe prompt
 const finalPrompt = createRootPromptLine();
@@ -2061,55 +2060,50 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-/* ================= START ================= */
-
 await resolveVisitorIP();
 generateTitleLogs();
 animationId = requestAnimationFrame(render);
 
-const enterBtn = document.getElementById("enterBtn");
+/* ===== Gedeelde startfunctie ===== */
 
-enterBtn.addEventListener("click", async () => {
-  document.body.style.overflow = "hidden"; // pas na intro locken
+async function startExperience() {
 
-  if (phase !== -100) return;
+  document.body.style.overflow = "hidden";
+
+  if (phase !== STATES.INTRO) return;
 
   hasBootedOnce = true;
-
   document.getElementById("introScreen").style.display = "none";
 
   // Nieuwe sessie
-    NETWORK_GROUP = getWeightedGroup();
-USERNAME_GROUP = pickUsernameGroup(NETWORK_GROUP);
-SITE_USER_OBJ = getRandomUserByGroup(USERNAME_GROUP);
-SITE_USER = SITE_USER_OBJ.username;
-    applyUILanguage(NETWORK_GROUP);
-    SESSION = generateSessionProfile();
-    generatePolicyDecision();
-
-// Dynamische sessieduur 
-if (SESSION.type === "scripted") {
-  LOOP_DURATION = 31000 + rand() * 10000;     
-}
-else if (SESSION.type === "datacenter") {
-  LOOP_DURATION = 32000 + rand() * 15000;     
-}
-else {
-  LOOP_DURATION = 33000 + rand() * 15000;    
-}
-
+  NETWORK_GROUP  = getWeightedGroup();
   USERNAME_GROUP = pickUsernameGroup(NETWORK_GROUP);
-SITE_USER_OBJ = getRandomUserByGroup(USERNAME_GROUP);
-SITE_USER = SITE_USER_OBJ.username;
+  SITE_USER_OBJ  = getRandomUserByGroup(USERNAME_GROUP);
+  SITE_USER      = SITE_USER_OBJ.username;
+
+  applyUILanguage(NETWORK_GROUP);
+
+  SESSION = generateSessionProfile();
+  generatePolicyDecision();
+
+  /* ===== Dynamische sessieduur ===== */
+
+  if (SESSION.type === "scripted") {
+    LOOP_DURATION = 29000 + rand() * 10000;
+  }
+  else if (SESSION.type === "datacenter") {
+    LOOP_DURATION = 30000 + rand() * 15000;
+  }
+  else {
+    LOOP_DURATION = 31000 + rand() * 15000;
+  }
 
   RANDOM_ASCII =
     ASCII_FIGURES[Math.floor(rand() * ASCII_FIGURES.length)];
 
-  // Theme gebaseerd op group
   const theme = getThemeForGroup(NETWORK_GROUP);
   applyTheme(theme);
 
-  // Reset typing state
   typedLength = 0;
   lastTypeTime = 0;
   titleFinished = 0;
@@ -2117,10 +2111,28 @@ SITE_USER = SITE_USER_OBJ.username;
   await resolveVisitorIP();
   generateTitleLogs();
 
-    experienceStart = performance.now();
-
+  experienceStart = performance.now();
   setState(STATES.TITLE);
+}
+
+/* ===== REGION BUTTONS ===== */
+
+document.querySelectorAll(".region-btn").forEach(btn => {
+
+  btn.addEventListener("click", async () => {
+
+    const region = btn.dataset.region;
+
+    if (region === "more") return;
+
+    ACTIVE_REGION = region;
+
+    await startExperience();
+  });
+
 });
+
+/* ===== BACK BUTTON ===== */
 
 const backBtn = document.getElementById("backBtn");
 
@@ -2132,15 +2144,61 @@ backBtn.addEventListener("click", () => {
   }
 });
 
-let LOOP_DURATION = null;
+
+/* ===== MORE THEMES OVERLAY ===== */
+
+const overlay = document.getElementById("themesOverlay");
+const closeBtn = document.getElementById("closeThemes");
+const moreBtn = document.querySelector('[data-region="more"]');
+
+if (overlay && closeBtn && moreBtn) {
+
+  moreBtn.addEventListener("click", () => {
+    overlay.classList.add("open");
+  });
+
+  closeBtn.addEventListener("click", () => {
+    overlay.classList.remove("open");
+  });
+
+}
+
+const resetBtn = document.getElementById("resetIntroBtn");
+
+if (resetBtn) {
+  resetBtn.addEventListener("click", () => {
+
+    // Stop terminal
+    terminalRunning = false;
+    terminalStarted = false;
+
+    // Terminal sluiten
+    terminalElement.classList.remove("open");
+    document.getElementById("terminalOutput").innerHTML = "";
+    document.getElementById("terminalTitle").textContent = "";
+
+    // Intro weer tonen
+    document.getElementById("introScreen").style.display = "flex";
+    document.body.style.overflow = "auto";
+
+    hasBootedOnce = false;
+
+    // Reset state
+    setState(STATES.INTRO);
+  });
+}
 
 })();
-
 </script>
 
+<button id="resetIntroBtn" class="footer-reset">
+  ◀ RESET
+</button>
+
 <footer class="copyright">
-  © 2026 S. Veenstra. All rights reserved
+  © 2026 S.V.
 </footer>
+
 </body>
 </html>
 

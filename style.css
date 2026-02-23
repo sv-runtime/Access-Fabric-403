@@ -53,7 +53,7 @@ canvas{
 .status{
   position:fixed;
   top:18px;
-  left:22px;
+  left:28px;
   font-size:11px;
   letter-spacing:3px;
   color:rgba(200,200,200,.45);
@@ -101,6 +101,30 @@ canvas{
   z-index:12;
 }
 
+.region-select {
+  display:flex;
+  gap:18px;
+  flex-wrap:wrap;
+  justify-content:center;
+}
+
+.region-btn {
+  padding:14px 26px;
+  border:1px solid var(--btn-idle);
+  background:rgba(0,0,0,.75);
+  color:var(--btn-idle);
+  letter-spacing:2px;
+  font-family:'IBM Plex Mono',monospace;
+  cursor:pointer;
+  transition:.25s ease;
+}
+
+.region-btn:hover {
+  border-color:var(--btn-hover);
+  color:var(--btn-hover);
+  box-shadow:0 0 16px var(--btn-hover);
+}
+
 /* ===========================
    INTRO (minimal)
 =========================== */
@@ -127,54 +151,6 @@ canvas{
   width:auto;
   max-width:90vw;
 }
-
-/* ===========================
-   INPUT
-=========================== */
-
-.input-screen{
-  position:fixed; inset:0;
-  display:none;
-  align-items:center; justify-content:center;
-  z-index:50;
-  background:rgba(0,0,0,0.55);
-  backdrop-filter: blur(2px);
-}
-.input-screen.open{ display:flex; }
-
-.input-panel{
-  width:min(420px, 92vw);
-  border:1px solid var(--ui-primary);
-  padding:18px;
-  font-family:'IBM Plex Mono', monospace;
-  background:rgba(0,0,0,0.85);
-  box-shadow:0 0 20px rgba(0,0,0,0.8);
-}
-
-.input-title{ color:var(--ui-primary); margin-bottom:10px; }
-#traceInput{
-  width:100%;
-  padding:10px;
-  font-size:18px;
-  background:#000;
-  color:var(--ui-secondary);
-  border:1px solid var(--ui-primary);
-  outline:none;
-  letter-spacing:3px;
-  text-transform:uppercase;
-}
-#traceSubmit{
-  margin-top:10px;
-  padding:10px 14px;
-  background:#000;
-  color:var(--ui-primary);
-  border:1px solid var(--ui-primary);
-  cursor:pointer;
-}
-#traceSubmit:hover{ color:var(--ui-secondary); border-color:var(--ui-secondary); }
-.input-result{ margin-top:10px; min-height:20px; color:#ddd; }
-.input-result.ok{ color:#b6ffb6; }
-.input-result.no{ color:#ffb6b6; }
 
 
 /* ===========================
@@ -304,20 +280,42 @@ canvas{
   font-size: var(--button-font);
 }
 
-.copyright{
+/* RESET knop links */
+.footer-reset {
   position: fixed;
-  bottom: 10px;
+  bottom: 18px;
+  left: 20px;
+  z-index: 9999;
+
+  background: none;
+  border: 1px solid var(--ui-primary);
+  color: var(--ui-primary);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.footer-reset:hover {
+  color: var(--ui-secondary);
+  border-color: var(--ui-secondary);
+  box-shadow: 0 0 8px var(--ui-secondary);
+}
+
+/* Copyright exact midden */
+.copyright {
+  position: fixed;
+  bottom: 18px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 9999;
+
   font-size: 11px;
   font-family: 'IBM Plex Mono', monospace;
-  opacity: 0.35;
-  letter-spacing: 0.5px;
-  pointer-events: none;
-  z-index: 5;
+  opacity: 0.5;
   color: var(--ui-secondary);
-  text-align: center;
-  white-space: nowrap;
+  pointer-events: none;
 }
 
 /* ===========================

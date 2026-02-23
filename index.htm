@@ -46,6 +46,7 @@
 
 <script>
 (async () => {
+
 let hasBootedOnce = false;
 let CONFIG = {};
 
@@ -70,25 +71,40 @@ function reseedWorld() {
 
 reseedWorld();
 
-async function loadConfig() {
-  const res = await fetch("config.txt?x=" + Date.now(), {
-    cache: "no-store"
-  });
+/* ================= CONFIG LOAD (MODULAR) ================= */
 
-  const text = await res.text();
+const [
+  TRAFFIC,
+  IDENTITY,
+  THEMES,
+  POLICY,
+  UI,
+  VISUALS
+] = await Promise.all([
+  fetch("traffic.txt",  { cache: "no-store" }).then(r => r.json()),
+  fetch("identity.txt", { cache: "no-store" }).then(r => r.json()),
+  fetch("themes.txt",   { cache: "no-store" }).then(r => r.json()),
+  fetch("policy.txt",   { cache: "no-store" }).then(r => r.json()),
+  fetch("ui.txt",       { cache: "no-store" }).then(r => r.json()),
+  fetch("visuals.txt",  { cache: "no-store" }).then(r => r.json())
+]);
 
-  console.log("LENGTH:", text.length);
-  console.log("FIRST 100:", text.slice(0,100));
+CONFIG = {
+  ...TRAFFIC,
+  ...IDENTITY,
+  ...THEMES,
+  ...POLICY,
+  ...UI,
+  ...VISUALS
+};
 
-  if (!text.trim()) {
-    throw new Error("Config TXT is empty");
-  }
-
-  CONFIG = JSON.parse(text);
+if (!CONFIG.GROUP_WEIGHTS) {
+  throw new Error("Config missing GROUP_WEIGHTS");
 }
 
-await loadConfig();
 document.body.style.overflow = "auto";
+
+/* ================= CONFIG BINDINGS ================= */
 
 const GEO_RESTRICTED_COUNTRIES =
   CONFIG.GEO_RESTRICTED_COUNTRIES || [];
@@ -109,6 +125,8 @@ const MIGRATION_MATRIX  = CONFIG.MIGRATION_MATRIX ?? {};
 const POLICY_RESULTS = CONFIG.POLICY_RESULTS;
 let POLICY_DECISION = null;
 
+/* ================= POLICY ENGINE ================= */
+
 function generatePolicyDecision() {
 
   // 1. Geo restriction op NETWORK level
@@ -121,9 +139,7 @@ function generatePolicyDecision() {
   }
 
   // 2. Cross-border anomaly detectie
-  if (
-    SESSION.type === "datacenter"
-  ) {
+  if (SESSION.type === "datacenter") {
     POLICY_DECISION = {
       status: "DENIED",
       reason: "cross-border datacenter anomaly"
@@ -366,8 +382,8 @@ generateTitleLogs();
   runTerminal();
 }
 
-const DOMAIN = window.location.hostname;
-const IP_ADDRESS = "0.0.0.0";
+const DOMAIN = "https://sterkbijziekte.nl";
+const IP_ADDRESS = "2a02:2350:5:10f:804f:7eb:3c1c:131b";
 let VISITOR_IP = "resolving...";
 let HOST_LABEL = "resolving...";
 
@@ -1679,7 +1695,7 @@ async function resolveVisitorIP() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1500);
 
-    const res = await fetch("/ip.php", {
+    const res = await fetch("ip.php", {
       cache: "no-store",
       signal: controller.signal
     });
@@ -1914,8 +1930,16 @@ pushAccessLog({
 });
 
 // toon echte tail (laatste 3 regels uit buffer)
-const tailLines = getTailLines(3);
 await printAccessTail(tailLines);
+
+// ===== COPYRIGHT TOEVOEGEN =====
+const copyrightLine = document.createElement("pre");
+copyrightLine.className = "term-line output";
+copyrightLine.style.opacity = "0.6";
+copyrightLine.textContent =
+  "© 2026 SterkBijZiekte.nl — Unauthorized reproduction prohibited.";
+terminalOutput.appendChild(copyrightLine);
+terminalBody.scrollTop = terminalBody.scrollHeight;
 
 // nieuwe prompt
 const finalPrompt = createRootPromptLine();
@@ -2105,6 +2129,10 @@ let LOOP_DURATION = null;
 })();
 
 </script>
+
+<footer class="copyright">
+  © 2026 S. Veenstra. All rights reserved
+</footer>
 </body>
 </html>
 
