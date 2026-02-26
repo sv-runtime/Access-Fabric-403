@@ -4,29 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-<title>403 — ACCESS DENIED</title>
+<title>403 - ACCESS DENIED</title>
 
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Mono&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=1">
+<link rel="stylesheet" href="./style/style.css?v=1">
 </head>
 
 <body>
 <canvas id="matrix"></canvas>
+<div class="status">403 - ACCESS DENIED</div>
 <div id="introScreen" class="intro-screen">
-  <button id="enterBtn"></button>
+
+<div class="intro-title">
+  403
 </div>
 
-<div id="inputScreen" class="input-screen">
-  <div class="input-panel">
-    <div class="input-title">ENTER TRACE (4 CHARS)</div>
-    <input id="traceInput" maxlength="4" autocomplete="off" spellcheck="false">
-    <button id="traceSubmit">VERIFY</button>
-    <div id="traceResult" class="input-result"></div>
-  </div>
+<div class="intro-action">
+  <button id="enterBtn" class="enter-btn"></button>
 </div>
 
-<div class="status">403 — ACCESS DENIED</div>
+</div>
+
+
 <button class="back-button back-inline" id="backBtn"></button>
 
 <div class="terminal">
@@ -44,174 +44,47 @@
 
 </div>
 
-<script>
-(async () => {
+<script type="module">
+
+import { loadConfig } from "./core/config.js";
+import { STATES, PHASE, setState } from "./core/state.js";
+import { reseedWorld, randFloat, getSeed } from "./core/random.js";
+import { initMatrixState } from "./engines/matrix.js";
+import { resolveVisitorIP, getVisitorIP, getHostLabel, isIPResolved } from "./core/ip.js";
+import { generatePolicyDecision, getPolicyDecision } from "./core/policy.js";
+import { applyTheme, getThemeForGroup, getThemePalette } from "./core/theme.js";
+
+;(async () => {
 
 let hasBootedOnce = false;
 let CONFIG = {};
+let ACTIVE_REGION = "world";
 
-let WORLD_SEED;
-let rand;
-
-function mulberry32(a) {
-  return function() {
-    let t = a += 0x6D2B79F5;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  }
-}
-
-function reseedWorld() {
-  const seedArray = new Uint32Array(1);
-  crypto.getRandomValues(seedArray);
-  WORLD_SEED = seedArray[0];
-  rand = mulberry32(WORLD_SEED);
-}
-
-reseedWorld();
-
-/* ================= CONFIG LOAD (MODULAR) ================= */
-
-const [
-  TRAFFIC,
-  IDENTITY,
-  THEMES,
-  POLICY,
-  UI,
-  VISUALS
-] = await Promise.all([
-  fetch("traffic.txt",  { cache: "no-store" }).then(r => r.json()),
-  fetch("identity.txt", { cache: "no-store" }).then(r => r.json()),
-  fetch("themes.txt",   { cache: "no-store" }).then(r => r.json()),
-  fetch("policy.txt",   { cache: "no-store" }).then(r => r.json()),
-  fetch("ui.txt",       { cache: "no-store" }).then(r => r.json()),
-  fetch("visuals.txt",  { cache: "no-store" }).then(r => r.json())
-]);
-
-CONFIG = {
-  ...TRAFFIC,
-  ...IDENTITY,
-  ...THEMES,
-  ...POLICY,
-  ...UI,
-  ...VISUALS
-};
-
-if (!CONFIG.GROUP_WEIGHTS) {
-  throw new Error("Config missing GROUP_WEIGHTS");
-}
+CONFIG = await loadConfig({ basePath: "./data", cache: "no-store" });
 
 document.body.style.overflow = "auto";
 
 /* ================= CONFIG BINDINGS ================= */
 
-const GEO_RESTRICTED_COUNTRIES =
-  CONFIG.GEO_RESTRICTED_COUNTRIES || [];
+const {
+  GEO_RESTRICTED_COUNTRIES = [],
 
-const GROUP_WEIGHTS = CONFIG.GROUP_WEIGHTS;
-const GROUP_LABELS  = CONFIG.GROUP_LABELS;
-const UI_TEXT       = CONFIG.UI_TEXT;
-const FLAG_THEMES   = CONFIG.FLAG_THEMES;
-const WEIRD_NAMES   = CONFIG.WEIRD_NAMES;
-const FIRST_NAMES   = CONFIG.FIRST_NAMES;
-const LAST_NAMES    = CONFIG.LAST_NAMES;
-const ASCII_FIGURES = CONFIG.ASCII_FIGURES;
+  GROUP_WEIGHTS,
+  GROUP_LABELS,
+  UI_TEXT,
+  FLAG_THEMES,
 
-const MIGRATION_ENABLED = CONFIG.MIGRATION_ENABLED ?? false;
-const MIGRATION_CHANCE  = CONFIG.MIGRATION_CHANCE ?? 0;
-const MIGRATION_MATRIX  = CONFIG.MIGRATION_MATRIX ?? {};
+  WEIRD_NAMES,
+  FIRST_NAMES,
+  LAST_NAMES,
+  ASCII_FIGURES,
 
-const POLICY_RESULTS = CONFIG.POLICY_RESULTS;
-let POLICY_DECISION = null;
+  MIGRATION_ENABLED = false,
+  MIGRATION_CHANCE = 0,
+  MIGRATION_MATRIX = {},
 
-/* ================= POLICY ENGINE ================= */
-
-function generatePolicyDecision() {
-
-  // 1. Geo restriction op NETWORK level
-  if (GEO_RESTRICTED_COUNTRIES.includes(NETWORK_GROUP)) {
-    POLICY_DECISION = {
-      status: "DENIED",
-      reason: "geo restriction policy"
-    };
-    return;
-  }
-
-  // 2. Cross-border anomaly detectie
-  if (SESSION.type === "datacenter") {
-    POLICY_DECISION = {
-      status: "DENIED",
-      reason: "cross-border datacenter anomaly"
-    };
-    return;
-  }
-
-  // 3. Normale policy fallback
-  const pool =
-    POLICY_RESULTS[SESSION.type] ||
-    POLICY_RESULTS["default"];
-
-  POLICY_DECISION =
-    pool[Math.floor(rand() * pool.length)];
-}
-
-/* ================= THEME ENGINE ================= */
-
-function applyTheme(theme){
-  const root = document.documentElement;
-
-  const primary   = (theme.primary   || "#ffffff").toLowerCase();
-  const secondary = (theme.secondary || "#ffffff").toLowerCase();
-
-const tertiary = (theme.tertiary || "#ffffff").toLowerCase();
-const uiTertiary = tertiary === "#000000" ? "#d0d0d0" : theme.tertiary;
-root.style.setProperty("--ui-tertiary", uiTertiary);
-
-  const uiPrimary =
-    primary === "#000000" ? "#d0d0d0" : theme.primary;
-
-  const uiSecondary =
-    secondary === "#000000" ? "#d0d0d0" : theme.secondary;
-
-  root.style.setProperty("--color-primary",   theme.primary);
-  root.style.setProperty("--color-secondary", theme.secondary);
-  root.style.setProperty("--color-tertiary",  theme.tertiary);
-  root.style.setProperty("--color-accent",    theme.accent);
-  root.style.setProperty("--color-error",     theme.error);
-
-  root.style.setProperty("--ui-primary",   uiPrimary);
-  root.style.setProperty("--ui-secondary", uiSecondary);
-
-  const isBlackPrimary = primary === "#000000";
-
-root.style.setProperty(
-  "--btn-idle",
-  isBlackPrimary ? theme.secondary : theme.primary
-);
-
-root.style.setProperty(
-  "--btn-hover",
-  isBlackPrimary ? theme.tertiary : theme.secondary
-);
-
-  currentPalette = [theme.primary, theme.secondary, theme.tertiary];
-
-  document.getElementById("enterBtn").style.opacity = "1";
-}
-
-function getThemeForGroup(group){
-  return FLAG_THEMES[group] || FLAG_THEMES["us"];
-}
-
-function getThemePalette() {
-  const s = getComputedStyle(document.documentElement);
-  return [
-    s.getPropertyValue('--color-primary').trim(),
-    s.getPropertyValue('--color-secondary').trim(),
-    s.getPropertyValue('--color-tertiary').trim()
-  ];
-}
+  POLICY_RESULTS
+} = CONFIG;
 
 // ===== TITLE =====
 let titleLogLines = [];
@@ -230,7 +103,7 @@ function generateTitleLogs() {
 titleLogLines = [];
 
 const events = [
-  `nginx: connection from ${VISITOR_IP} accepted`,
+  `nginx: connection from ${getVisitorIP()} accepted`,
   `http: GET / → access control engaged`,
   `auth-module: request context received`,
   `authz: evaluation pending (rbac)`,];
@@ -266,25 +139,7 @@ function getTailLines(n = TAIL_LINES) {
   return accessLogBuffer.slice(-n);
 }
 
-function uiPrimaryForGroup(group) {
-  const theme = getThemeForGroup(group);
-  const primary = (theme.primary || "#ffffff").toLowerCase();
-  return theme.primary;
-}
-
 /* ================= MATRIX CORE ================= */
-
-const STATES = {
-    INTRO: -100,
-    TITLE: -50,
-    CURTAIN: 0,
-    HASH: 50,
-    BLACKOUT: 100,
-    MATRIX_INTRO: 200,
-    MATRIX_RUN: 300
-};
-
-let phase = STATES.INTRO;
 
 const canvas = document.getElementById("matrix");
 const ctx = canvas.getContext("2d");
@@ -305,6 +160,8 @@ const matrixChars =
 
 let matrixFontSize  = window.innerWidth > 1800 ? 26 : 18;
 let curtainFontSize = window.innerWidth > 1800 ? 20 : 14;
+
+let LOOP_DURATION = 45000;
 
 const trailSpacing = 20;
 
@@ -336,7 +193,6 @@ const curtainDepth = 4;
 
 const curtainPauseDuration = 3000;
 let curtainPauseStart = 0;
-let currentPalette = [];
 
 let CAPTURED_PASSWORD = null;
 
@@ -368,24 +224,26 @@ let terminalStarted = false;
 let terminalRunning = false;
 
 async function startTerminalSequence() {
+
+if (!isIPResolved()) {
 await resolveVisitorIP();
-generateTitleLogs();
-
-
-  HOST_LABEL = VISITOR_IP; // expliciet zetten
-
-  document.getElementById("terminalTitle").textContent =
-    `Terminal—${SITE_USER}@${VISITOR_IP}:~`;
-
-  await new Promise(r => requestAnimationFrame(r));
-
-  runTerminal();
 }
 
-const DOMAIN = "https://sterkbijziekte.nl";
+generateTitleLogs();
+
+terminalElement.classList.add("open");
+
+document.getElementById("terminalTitle").textContent =
+  `Terminal-${SITE_USER}@${getVisitorIP()}:~`;
+
+await new Promise(r => requestAnimationFrame(r));
+
+runTerminal();
+}
+
+const BASE_DOMAIN = "sterkbijziekte.nl";
+const FULL_DOMAIN = "https://sterkbijziekte.nl";
 const IP_ADDRESS = "2a02:2350:5:10f:804f:7eb:3c1c:131b";
-let VISITOR_IP = "resolving...";
-let HOST_LABEL = "resolving...";
 
 let LAST_PROTOCOL = "HTTP/1.1";
 
@@ -442,20 +300,20 @@ function generateWeirdUsername(group) {
   const weirdPool = WEIRD_NAMES[group] || [];
   if (!weirdPool.length) return null;
 
-  const base = weirdPool[Math.floor(rand() * weirdPool.length)];
+  const base = weirdPool[Math.floor(randFloat() * weirdPool.length)];
   let username = base;
 
   // Suffix verplicht: kies jaar vs digits
-  const useYear = rand() < 0.60; // 60% jaar, 40% digits (tweak naar smaak)
+  const useYear = randFloat() < 0.60;
 
   if (useYear) {
-    const year = 1968 + Math.floor(rand() * 58); // 1968–2025-ish
-    const sep = rand() < 0.50 ? "_" : ".";       
+    const year = 1968 + Math.floor(randFloat() * 58);
+const sep = randFloat() < 0.50 ? "_" : ".";   
     username += sep + year;
   } else {
-    const digits = (rand() < 0.65)
-      ? (10 + Math.floor(rand() * 90))     // 10–99
-      : Math.floor(rand() * 9999);         // 0–9998
+    const digits = (randFloat() < 0.65)
+      ? (10 + Math.floor(randFloat() * 90))     // 10–99
+      : Math.floor(randFloat() * 9999);         // 0–9998
     username += digits;
   }
 
@@ -470,18 +328,18 @@ function generateNormalUsername(group) {
     return { username: "unknown", group };
   }
 
-  const first = firstPool[Math.floor(rand() * firstPool.length)];
-  const includeLast = rand() < 0.70 && lastPool.length > 0;
+  const first = firstPool[Math.floor(randFloat() * firstPool.length)];
+  const includeLast = randFloat() < 0.70 && lastPool.length > 0;
 
   let username = first;
   let pattern = "first_only"; // label zodat we later suffix rules kunnen toepassen
 
   if (includeLast) {
-    const last = lastPool[Math.floor(rand() * lastPool.length)];
+    const last = lastPool[Math.floor(randFloat() * lastPool.length)];
     const separators = [".", "_", "-"];
-    const sep = separators[Math.floor(rand() * separators.length)];
+    const sep = separators[Math.floor(randFloat() * separators.length)];
 
-    const patternRoll = rand();
+    const patternRoll = randFloat();
 
     if (patternRoll < 0.45) {
       username = first + sep + last;
@@ -502,20 +360,20 @@ function generateNormalUsername(group) {
     }
   } else {
     // first only
-    const variantRoll = rand();
+    const variantRoll = randFloat();
 
     if (variantRoll < 0.35) {
-      const year = 1950 + Math.floor(rand() * 71);
+      const year = 1950 + Math.floor(randFloat() * 71);
       username += year;
       pattern = "first_year";
       return { username: username.toLowerCase(), group };
     } else if (variantRoll < 0.65) {
-      username += Math.floor(rand() * 9999);
+      username += Math.floor(randFloat() * 9999);
       pattern = "first_digits";
       return { username: username.toLowerCase(), group };
     } else if (variantRoll < 0.80) {
-      const year = 1950 + Math.floor(rand() * 71);
-      const sep = rand() < 0.5 ? "_" : "-";
+      const year = 1950 + Math.floor(randFloat() * 71);
+      const sep = randFloat() < 0.5 ? "_" : "-";
       username += sep + year;
       pattern = "first_sep_year";
       return { username: username.toLowerCase(), group };
@@ -544,15 +402,15 @@ function generateNormalUsername(group) {
       (pattern === "firstlast" || pattern === "lastfirst") ? 0.55 :
       0.30;
 
-    if (rand() < suffixChance) {
+    if (randFloat() < suffixChance) {
       // mix jaar vs digits
-      if (rand() < 0.55) {
-        const year = 1968 + Math.floor(rand() * 58); // 1968–2025-ish
+      if (randFloat() < 0.55) {
+        const year = 1968 + Math.floor(randFloat() * 58); // 1968–2025-ish
         username += year;
       } else {
-        const digits = (rand() < 0.55)
-          ? Math.floor(rand() * 99)     // 0-98
-          : Math.floor(rand() * 9999);  // 0-9998
+        const digits = (randFloat() < 0.55)
+          ? Math.floor(randFloat() * 99)     // 0-98
+          : Math.floor(randFloat() * 9999);  // 0-9998
         username += digits;
       }
     }
@@ -566,7 +424,7 @@ function generateNormalUsername(group) {
 function getRandomUserByGroup(group) {
   const weirdChance = 0.35; // was 0.15
 
-  if (rand() < weirdChance) {
+  if (randFloat() < weirdChance){
     const weird = generateWeirdUsername(group);
     if (weird) return weird;
   }
@@ -574,34 +432,50 @@ function getRandomUserByGroup(group) {
 }
 
 function getTrafficType(){
-  return rand() < 0.75 ? "local" : "external";
+  return randFloat() < 0.75 ? "local" : "external";
+}
+
+function pickFromWeights(weightObj) {
+
+  const entries = Object.entries(weightObj);
+  const total = entries.reduce((sum, [, weight]) => sum + weight, 0);
+
+  let r = randFloat() * total;
+
+  for (const [key, weight] of entries) {
+    if (r < weight) return key;
+    r -= weight;
+  }
+
+  // fallback
+  return entries[0][0];
 }
 
 function getWeightedGroup() {
-  return pickFromWeights(GROUP_WEIGHTS);
-}
 
-function pickFromWeights(weights){
-  const total = Object.values(weights).reduce((a,b)=>a+b,0);
-  let r = rand() * total;
-
-  for (const key in weights) {
-    r -= weights[key];
-    if (r <= 0) return key;
+  if (ACTIVE_REGION === "world") {
+    return pickFromWeights(GROUP_WEIGHTS);
   }
 
-  return Object.keys(weights)[0];
+  const regionWeights =
+    CONFIG.GROUP_WEIGHTS_BY_REGION?.[ACTIVE_REGION];
+
+  if (regionWeights) {
+    return pickFromWeights(regionWeights);
+  }
+
+  return pickFromWeights(GROUP_WEIGHTS);
 }
 
 function getRandomUser() {
   const group = getWeightedGroup();
 
   if (SESSION.usernameStyle === "weird-heavy") {
-    if (rand() < 0.75) return generateWeirdUsername(group) || generateNormalUsername(group); // was 0.6
+    if (randFloat() < 0.75) return generateWeirdUsername(group) || generateNormalUsername(group); // was 0.6
   }
 
   if (SESSION.usernameStyle === "mixed") {
-    if (rand() < 0.45) return generateWeirdUsername(group) || generateNormalUsername(group); // was 0.3
+    if (randFloat() < 0.45) return generateWeirdUsername(group) || generateNormalUsername(group); // was 0.3
   }
 
   return getRandomUserByGroup(group);
@@ -611,8 +485,11 @@ function applyUILanguage(group){
 
   const ui = UI_TEXT[group] || UI_TEXT["us"];
 
-  document.getElementById("enterBtn").textContent = ui.enter;
-  document.getElementById("backBtn").textContent  = ui.back;
+  const backBtn = document.getElementById("backBtn");
+  if (backBtn) backBtn.textContent = ui.back;
+
+  const enterBtn = document.getElementById("enterBtn");
+  if (enterBtn) enterBtn.textContent = ui.enter;
 }
 
 function deriveToken(session) {
@@ -632,7 +509,7 @@ function pickUsernameGroup(networkGroup) {
 
   const foreignChance = 0.10;
 
-  if (rand() > foreignChance) {
+  if (randFloat() > foreignChance) {
     return networkGroup;
   }
 
@@ -641,7 +518,7 @@ function pickUsernameGroup(networkGroup) {
 
   if (!groups.length) return networkGroup;
 
-  return groups[Math.floor(rand() * groups.length)];
+  return groups[Math.floor(randFloat() * groups.length)];
 }
 
 let NETWORK_GROUP = getWeightedGroup();
@@ -659,115 +536,75 @@ function seedAccessLogIfEmpty() {
   pushAccessLog(generateOldLog());
 }
 
-seedAccessLogIfEmpty();
-
-function renderIntroContent(group){
-
-  const content =
-    CONFIG.INTRO_CONTENT[group] ||
-    CONFIG.INTRO_CONTENT["us"];
-
-  document.getElementById("introTitle").textContent =
-    content.title;
-
-  document.getElementById("introOpening").textContent =
-    content.opening;
-
-  const ul = document.getElementById("introFeatures");
-  ul.innerHTML = "";
-
-  content.features.forEach(f => {
-    const li = document.createElement("li");
-    li.textContent = f;
-    ul.appendChild(li);
-  });
-
-  document.getElementById("introClosing").textContent =
-    content.closing;
-}
-
 // Intro minimal: direct zichtbaar maken
 const intro = document.getElementById("introScreen");
 intro.classList.add("ready");
 
 let SESSION = generateSessionProfile();
-generatePolicyDecision();
+generatePolicyDecision({
+  networkGroup: NETWORK_GROUP,
+  session: SESSION,
+  geoRestrictedCountries: GEO_RESTRICTED_COUNTRIES,
+  policyResults: POLICY_RESULTS,
+  randFloat
+});
 
-const selectedTheme = getThemeForGroup(NETWORK_GROUP);
+const selectedTheme = getThemeForGroup(NETWORK_GROUP, FLAG_THEMES);
 applyTheme(selectedTheme);
 
-/* ================= TITLE / HASH STATE ================= */
+/* ================= TIMING CONFIG ================= */
+
+const TIMING = {
+  typingSpeed: 16,
+  titlePause: 1500,
+  hashPause: 2500,
+  blackoutDuration: 250,
+  introDuration: 700,
+  rollingDuration: 900,
+  settleDuration: 400,
+  curtainPause: 3000
+};
+
+/* ===== TITLE STATE ===== */
 
 let typedLength = 0;
-let typingSpeed = 16;
 let lastTypeTime = 0;
-let titlePause = 1500;
 let titleFinished = 0;
 
+/* ===== RANDOM ASCII ===== */
+
 let RANDOM_ASCII =
-  ASCII_FIGURES[Math.floor(rand() * ASCII_FIGURES.length)];
+  ASCII_FIGURES[Math.floor(randFloat() * ASCII_FIGURES.length)];
+
+/* ===== HASH TEXT ===== */
 
 function getHashText() {
 
-const lines = [
-  `Session-ID: ${rollingSession}`,
-  `User-ID: ${SITE_USER}`,
-  `X-Auth-Token: ${CAPTURED_PASSWORD || ""}`,
-  `Geo: ${GROUP_LABELS[NETWORK_GROUP] || NETWORK_GROUP}`,
-];
+  const lines = [
+    `Session-ID: ${rollingSession}`,
+    `User-ID: ${SITE_USER}`,
+    `X-Auth-Token: ${CAPTURED_PASSWORD || ""}`,
+    `Geo: ${GROUP_LABELS[NETWORK_GROUP] || NETWORK_GROUP}`
+  ];
 
-lines.push(
-  "",
-  "Authorization-Engine: RBAC v2.3",
-  `Policy-Check: ${POLICY_DECISION.status} (${POLICY_DECISION.reason})`,
-  "",
-  "HTTP 403 — ACCESS DENIED",
-  "",
-  RANDOM_ASCII
-);
+  lines.push(
+    "",
+    "Authorization-Engine: RBAC v2.3",
+    `Policy-Check: ${getPolicyDecision().status} (${getPolicyDecision().reason})`,
+    "",
+    "HTTP 403 - ACCESS DENIED",
+    "",
+    RANDOM_ASCII
+  );
 
   return lines.join("\n");
 }
 
+/* ===== HASH STATE ===== */
+
 let hashTypedLength = 0;
 let hashLastTypeTime = 0;
 let hashFinished = 0;
-let hashPause = 2500;
-
-/* ================= PHASE TIMING ================= */
-
-const blackoutDuration = 250;
-const introDuration = 700;
-let phaseStart = 0;
-
-function setState(newState, timestamp) {
-
-  phase = newState;
-  phaseStart = timestamp || performance.now();
-
-  switch (newState) {
-
-    case STATES.CURTAIN:
-      curtainOffset = -window.innerHeight;
-      curtainPauseStart = 0;
-      break;
-
-    case STATES.HASH:
-      hashTypedLength = 0;
-      hashLastTypeTime = 0;
-      hashFinished = 0;
-      break;
-
-    case STATES.BLACKOUT:
-      blackoutStart = timestamp;
-      break;
-
-    case STATES.MATRIX_INTRO:
-      terminalElement.classList.add("open");
-      startTerminalSequence();
-      break;
-  }
-}
 
 /* ================= RESIZE ================= */
 
@@ -789,58 +626,28 @@ function resize() {
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.imageSmoothingEnabled = false;
 
-  /* ================= MATRIX BASIS ================= */
-
   curtainColumns = Math.floor(cssWidth / curtainColumnSpacing);
   matrixColumns  = Math.floor(cssWidth / matrixFontSize);
 
-  /* ================= INTRO MATRIX (FASE -100) ================= */
+  introColumns = Math.max(
+    8,
+    Math.floor(cssWidth / matrixFontSize)
+  );
 
-const INTRO_DEPTH_LAYERS = 3;
+  const state = initMatrixState({
+    introColumns,
+    matrixColumns,
+    randFloat
+  });
 
-introColumns = Math.max(
-  8,
-  Math.floor(cssWidth / matrixFontSize)
-);
-
-// array van lagen
-introDrops = [];
-
-for (let d = 0; d < INTRO_DEPTH_LAYERS; d++) {
-
-  const layerDrops = [];
-
-  for (let i = 0; i < introColumns; i++) {
-    layerDrops[i] = rand() * -50;
-  }
-
-  introDrops.push(layerDrops);
-}
-
-  /* ================= MATRIX ARRAYS RESET ================= */
-
-  drops = [];
-  stacks = [];
-  speeds = [];
-  maxLengths = [];
-  spawnRates = [];
-  drift = [];
-  driftOffset = [];
-
-  for (let i = 0; i < matrixColumns; i++) {
-
-    drops[i]  = rand() * -100;
-    stacks[i] = [];
-
-    speeds[i] = 0.08 + rand() * 0.25;
-    maxLengths[i] = 10 + Math.floor(rand() * 40);
-    spawnRates[i] = 0.3 + rand() * 0.6;
-
-    drift[i] = (rand() - 0.5) * 6;
-    driftOffset[i] = 0;
-  }
-
-  /* ================= CURTAIN GRID ================= */
+  introDrops  = state.introDrops;
+  drops       = state.drops;
+  stacks      = state.stacks;
+  speeds      = state.speeds;
+  maxLengths  = state.maxLengths;
+  spawnRates  = state.spawnRates;
+  drift       = state.drift;
+  driftOffset = state.driftOffset;
 
   const rows = Math.ceil(cssHeight / curtainLineHeight);
   curtainGrid = [];
@@ -852,7 +659,7 @@ for (let d = 0; d < INTRO_DEPTH_LAYERS; d++) {
     for (let r = 0; r < rows * curtainDepth; r++) {
 
       curtainGrid[c][r] =
-        curtainChars[Math.floor(rand() * curtainChars.length)];
+        curtainChars[Math.floor(randFloat() * curtainChars.length)];
     }
   }
 
@@ -875,7 +682,7 @@ function charAt(col, row, blockIndex) {
     (col * 374761393) ^
     (row * 668265263) ^
     (blockIndex * 1442695041) ^
-    WORLD_SEED;
+    getSeed();
 
   x = (x ^ (x >>> 13)) * 1274126177;
   x = x ^ (x >>> 16);
@@ -910,7 +717,7 @@ function captureCurtainPassword() {
 
   if (!visibleColumns.length) return;
 
-  const chosenCol = visibleColumns[Math.floor(rand() * visibleColumns.length)];
+  const chosenCol = visibleColumns[Math.floor(randFloat() * visibleColumns.length)];
   const blockIndex = Math.floor(chosenCol / (blockWidth + gapWidth));
 
   const midRow = Math.floor(rowsOnScreen / 2);
@@ -950,15 +757,15 @@ function wrapLine(ctx, line, maxWidth) {
   return wrapped;
 }
 
-function elapsedInState(timestamp) {
-  return timestamp - phaseStart;
-}
-
 function render(timestamp){
 
   const runtime = experienceStart ? (timestamp - experienceStart) : 0;
 
-if (experienceStart && runtime > LOOP_DURATION) {
+if (
+  experienceStart &&
+  runtime > LOOP_DURATION &&
+  PHASE.current === STATES.MATRIX_RUN
+) {
   resetExperience();
   experienceStart = performance.now();
 }
@@ -974,9 +781,11 @@ if (experienceStart && runtime > LOOP_DURATION) {
 
   lastTime = timestamp;
 
+const palette = getThemePalette();
+
   /* ===== BACKGROUND ===== */
 
-const isMatrixTrailPhase = phase === 200 || phase === 300;
+const isMatrixTrailPhase = PHASE.current  === 200 || PHASE.current  === 300;
 
 if (isMatrixTrailPhase) {
   ctx.fillStyle = "rgba(0,0,0,0.12)";
@@ -989,7 +798,7 @@ if (isMatrixTrailPhase) {
 
 /* ===== FASE -100 INTRO ===== */
 
-if (phase === STATES.INTRO) {
+if (PHASE.current === STATES.INTRO) {
 
   const height = window.innerHeight;
 
@@ -1018,10 +827,9 @@ if (phase === STATES.INTRO) {
       const y = layer[i] * matrixFontSize;
 
       const char =
-        matrixChars[Math.floor(rand() * matrixChars.length)];
+        matrixChars[Math.floor(randFloat() * matrixChars.length)];
 
-      const baseColor =
-  currentPalette[i % currentPalette.length];
+const baseColor = palette[i % palette.length];
 
 const isBlack =
   baseColor.toLowerCase() === "#000000";
@@ -1049,7 +857,7 @@ if (isBlack) {
       layer[i] += cfg.speed;
 
       if (y > height) {
-        layer[i] = rand() * -20;
+        layer[i] = randFloat() * -20;
       }
     }
   }
@@ -1061,24 +869,22 @@ if (isBlack) {
 
 /* ===== FASE -50 TITLE ===== */
 
-if (phase === STATES.TITLE) {
+if (PHASE.current  === STATES.TITLE) {
 
   const currentTitle = getTitleText();
 
   if (!lastTypeTime) lastTypeTime = timestamp;
 
   if (typedLength < currentTitle.length) {
-    if (timestamp - lastTypeTime > typingSpeed) {
+    if (timestamp - lastTypeTime > TIMING.typingSpeed) {
       typedLength++;
       lastTypeTime = timestamp;
     }
   } else {
     if (!titleFinished) titleFinished = timestamp;
-    if (timestamp - titleFinished > titlePause) {
-      phase = 0;
-      curtainOffset = -window.innerHeight;
-      curtainPauseStart = 0;
-    }
+if (timestamp - titleFinished > TIMING.titlePause) {
+  setState(STATES.CURTAIN, timestamp);
+}
   }
 
   ctx.fillStyle = "#ffffff";
@@ -1108,7 +914,7 @@ ctx.fillRect(cursorX + 4, cursorY, 8, 16);
 
   /* ===== FASE 0 GORDIJN ===== */
 
-  if (phase === STATES.CURTAIN) {
+  if (PHASE.current  === STATES.CURTAIN) {
 
     ctx.font = curtainFontSize + "px 'IBM Plex Mono', monospace";
 ctx.shadowBlur = 0;
@@ -1133,7 +939,7 @@ ctx.shadowColor = "transparent";
       if (!inBlock) continue;
 
 const x = c * curtainColumnSpacing;
-const baseColor = currentPalette[blockIndex % currentPalette.length];
+const baseColor = palette[blockIndex % palette.length];
 const isBlack = baseColor.toLowerCase() === "#000000";
 
 for (let r = -extra; r < rowsOnScreen + extra; r++) {
@@ -1201,7 +1007,7 @@ rollingSession = "";
 
   /* ===== FASE 50 HASH SCREEN ===== */
 
-if (phase === STATES.HASH) {
+if (PHASE.current  === STATES.HASH) {
 
   ctx.fillStyle = "#000";
   ctx.fillRect(0,0,canvas.width,canvas.height);
@@ -1224,7 +1030,7 @@ if (phase === STATES.HASH) {
       rollingSession = "";
 
       for (let i = 0; i < 16; i++) {
-        rollingSession += chars[Math.floor(rand() * chars.length)];
+        rollingSession += chars[Math.floor(randFloat() * chars.length)];
       }
 
     } else {
@@ -1244,14 +1050,14 @@ if (!rollingTriggered && hashTypedLength >= sessionLineIndex - 5) {
   /* ===== TYPING ===== */
 
   if (hashTypedLength < fullHash.length) {
-    if (timestamp - hashLastTypeTime > typingSpeed) {
+    if (timestamp - hashLastTypeTime > TIMING.typingSpeed) {
       hashTypedLength++;
       hashLastTypeTime = timestamp;
     }
   } else {
     if (!hashFinished) hashFinished = timestamp;
 
-    if (timestamp - hashFinished > hashPause) {
+    if (timestamp - hashFinished > TIMING.hashPause){
   setState(STATES.BLACKOUT, timestamp);
 }
   }
@@ -1311,16 +1117,14 @@ if (!rollingTriggered && hashTypedLength >= sessionLineIndex - 5) {
 
 /* ===== FASE 100 BLACKOUT ===== */
 
-if (phase === STATES.BLACKOUT) {
+if (PHASE.current  === STATES.BLACKOUT) {
 
   const elapsed = timestamp - blackoutStart;
-  const progress = Math.min(elapsed / blackoutDuration, 1);
+  const progress = Math.min(elapsed / TIMING.blackoutDuration, 1);
 
-  // 1) snelle fade naar zwart
   ctx.fillStyle = `rgba(0,0,0,${progress})`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 2) korte witte security flash in begin
   if (elapsed < 60) {
     ctx.save();
     ctx.globalAlpha = 0.15;
@@ -1329,7 +1133,6 @@ if (phase === STATES.BLACKOUT) {
     ctx.restore();
   }
 
-  // 3) horizontale scan band
   if (elapsed < 140) {
     ctx.save();
     ctx.globalAlpha = 0.18;
@@ -1339,17 +1142,13 @@ if (phase === STATES.BLACKOUT) {
     ctx.restore();
   }
 
-  // volledig zwart -> door naar matrix intro
-  if (elapsed >= blackoutDuration && !terminalStarted) {
-    terminalStarted = true;
-    setState(STATES.MATRIX_INTRO, timestamp);
-  }
+if (elapsed >= TIMING.blackoutDuration) {
+  setState(STATES.MATRIX_INTRO);
+}
 
   requestAnimationFrame(render);
   return;
 }
-
-  /* ===== FASE 200 + 300 MATRIX ===== */
 
   ctx.font = matrixFontSize + "px 'Noto Sans Mono', 'IBM Plex Mono', monospace";
 
@@ -1357,19 +1156,26 @@ if (phase === STATES.BLACKOUT) {
 
     const x = (i * matrixFontSize) + driftOffset[i];
     const y = drops[i] * matrixFontSize;
-    const colColor = currentPalette[i % currentPalette.length];
+const colColor = palette[i % palette.length];
 
-    if (phase === STATES.MATRIX_INTRO && timestamp - phaseStart > introDuration) {
-      phase = 300;
+if (
+  PHASE.current === STATES.MATRIX_INTRO &&
+  timestamp - PHASE.start > TIMING.introDuration
+) {
+  setState(STATES.MATRIX_RUN);
 
-      terminalPhaseStarted = true;
-      terminalGlitchActive = true;
-      terminalGlitchBursts = 2; // eerste twee geforceerd
-      terminalGlitchEnd = timestamp + 50;
-    }
+  terminalPhaseStarted = true;
+  terminalGlitchActive = true;
+  terminalGlitchBursts = 2;
+  terminalGlitchEnd = timestamp + 50;
 
+  if (!terminalStarted) {
+    terminalStarted = true;
+    startTerminalSequence();
+  }
+}
 
-if (phase === STATES.MATRIX_INTRO) {
+if (PHASE.current  === STATES.MATRIX_INTRO) {
 
   const depthLayers = [
     { speed: 0.55, alpha: 0.18, scale: 0.85 },
@@ -1390,10 +1196,10 @@ if (phase === STATES.MATRIX_INTRO) {
       "px 'Noto Sans Mono','IBM Plex Mono',monospace";
 
     const char =
-      matrixChars[Math.floor(rand()*matrixChars.length)];
+      matrixChars[Math.floor(randFloat()*matrixChars.length)];
 
     if (d === depthLayers.length - 1) {
-      // voorste laag = head highlight
+
       ctx.fillStyle = "#e6e6e6";
       ctx.globalAlpha = 1;
       ctx.shadowBlur = 12;
@@ -1402,7 +1208,7 @@ if (phase === STATES.MATRIX_INTRO) {
       const isBlack = colColor.toLowerCase() === "#000000";
 
 if (isBlack) {
-  ctx.fillStyle = "#d0d0d0";   // lifted zwart
+  ctx.fillStyle = "#d0d0d0";  
   ctx.globalAlpha = layer.alpha * 0.7;
 } else {
   ctx.fillStyle = colColor;
@@ -1420,20 +1226,12 @@ if (isBlack) {
   drops[i] += 12 * delta;
 
   if (drops[i] * matrixFontSize > canvas.height) {
-    drops[i] = rand() * -40;
-  }
-
-  ctx.globalAlpha = 1;
-
-  drops[i] += 12 * delta;
-
-  if (drops[i] * matrixFontSize > canvas.height) {
-    drops[i] = rand() * -40;
+    drops[i] = randFloat() * -40;
   }
 } else {
 
-      if (rand() < spawnRates[i]) {
-        stacks[i].unshift(matrixChars[Math.floor(rand()*matrixChars.length)]);
+      if (randFloat() < spawnRates[i]) {
+        stacks[i].unshift(matrixChars[Math.floor(randFloat()*matrixChars.length)]);
       }
 
       if (stacks[i].length > maxLengths[i]) stacks[i].pop();
@@ -1456,12 +1254,11 @@ if (t === 0) {
 
 } else {
 
-  const baseColor = currentPalette[i % currentPalette.length];
+const baseColor = palette[i % palette.length];
 const isBlack = baseColor.toLowerCase() === "#000000";
 
 if (isBlack) {
 
-  // 1) subtiele lift-laag
   ctx.save();
   ctx.fillStyle = "rgba(200,200,200," + (alpha * 0.35) + ")";
   ctx.fillText(stacks[i][t], x, trailY);
@@ -1491,31 +1288,26 @@ ctx.globalAlpha = 1;
       drops[i] += speeds[i] * 15 * delta;
 
       if (drops[i] * matrixFontSize > canvas.height + 120) {
-        drops[i] = rand() * -20;
+        drops[i] = randFloat() * -20;
         stacks[i] = [];
       }
     }
   }
 
-/* ===== GLITCH TRIGGER (PHASE 200 ONLY) ===== */
 
-if (phase === STATES.MATRIX_INTRO) {
+if (PHASE.current === STATES.MATRIX_INTRO) {
 
   if (!glitchActive && timestamp >= nextGlitchTime) {
 
     glitchActive = true;
 
-    // 40% kans op dubbele burst
-    glitchBursts = rand() < 0.4 ? 2 : 1;
+    glitchBursts = randFloat() < 0.4 ? 2 : 1;
 
     glitchEnd = timestamp + 45;
 
-    // volgende glitch pas over 900–2200ms
-    nextGlitchTime = timestamp + 900 + rand() * 1300;
+    nextGlitchTime = timestamp + 900 + randFloat() * 1300;
   }
 }
-
-/* ===== GLITCH FLASH ===== */
 
 if (glitchActive) {
 
@@ -1524,9 +1316,9 @@ if (glitchActive) {
     glitchBursts--;
 
     if (glitchBursts > 0) {
-      // korte onderbreking tussen flitsen
+
       glitchEnd = timestamp + 70; 
-      glitchActive = "gap";       // tijdelijk uit
+      glitchActive = "gap";     
     } else {
       glitchActive = false;
     }
@@ -1536,18 +1328,18 @@ if (glitchActive) {
 
     ctx.save();
 
-    ctx.globalAlpha = 0.12 + rand() * 0.06;
+    ctx.globalAlpha = 0.12 + randFloat() * 0.06;
     ctx.globalCompositeOperation = "source-over";
 
-    ctx.fillStyle = rand() < 0.5
+    ctx.fillStyle = randFloat() < 0.5
       ? "rgba(160,30,25,1)"
       : "rgba(190,60,20,1)";
 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.globalAlpha = 0.18;
-    const bandY = rand() * canvas.height;
-    const bandHeight = 4 + rand() * 10;
+    const bandY = randFloat() * canvas.height;
+    const bandHeight = 4 + randFloat() * 10;
     ctx.fillRect(0, bandY, canvas.width, bandHeight);
 
     ctx.restore();
@@ -1563,7 +1355,7 @@ if (glitchActive) {
 
 /* ===== TERMINAL GLITCH ENGINE ===== */
 
-if (phase === STATES.MATRIX_RUN) {
+if (PHASE.current === STATES.MATRIX_RUN) {
 
   // normale random scheduling
   if (!terminalGlitchActive && timestamp >= terminalNextGlitch) {
@@ -1571,13 +1363,13 @@ if (phase === STATES.MATRIX_RUN) {
     terminalGlitchActive = true;
 
     // 25% kans op dubbele burst
-    terminalGlitchBursts = rand() < 0.25 ? 2 : 1;
+    terminalGlitchBursts = randFloat() < 0.25 ? 2 : 1;
 
     terminalGlitchEnd = timestamp + 40;
 
     // volgende volledig random interval (5–30 sec)
     terminalNextGlitch =
-      timestamp + (5000 + rand() * 25000);
+      timestamp + (5000 + randFloat() * 25000);
   }
 }
 
@@ -1586,13 +1378,13 @@ if (terminalGlitchActive) {
   // teken glitch
   ctx.save();
 
-  ctx.globalAlpha = 0.08 + rand() * 0.08;
+  ctx.globalAlpha = 0.08 + randFloat() * 0.08;
   ctx.fillStyle = "rgba(170,40,30,1)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   ctx.globalAlpha = 0.15;
-  const bandY = rand() * canvas.height;
-  ctx.fillRect(0, bandY, canvas.width, 6 + rand() * 10);
+  const bandY = randFloat() * canvas.height;
+  ctx.fillRect(0, bandY, canvas.width, 6 + randFloat() * 10);
 
   ctx.restore();
 
@@ -1624,17 +1416,17 @@ function generateOldLog() {
   const fakeGroup = getWeightedGroup();
 
   const fakeIP =
-    `${Math.floor(rand()*255)}.` +
-    `${Math.floor(rand()*255)}.` +
-    `${Math.floor(rand()*255)}.` +
-    `${Math.floor(rand()*255)}`;
+    `${Math.floor(randFloat()*255)}.` +
+    `${Math.floor(randFloat()*255)}.` +
+    `${Math.floor(randFloat()*255)}.` +
+    `${Math.floor(randFloat()*255)}`;
 
   const fakeUserObj = getRandomUserByGroup(fakeGroup);
   const fakeUser = fakeUserObj.username;
 
-  const fakeSize = Math.floor(120 + rand()*200);
+  const fakeSize = Math.floor(120 + randFloat()*200);
 
-  const protocol = rand() < 0.7 ? "HTTP/1.1" : "HTTP/2";
+  const protocol = randFloat() < 0.7 ? "HTTP/1.1" : "HTTP/2";
 
   const status = 403;
 
@@ -1643,7 +1435,7 @@ function generateOldLog() {
   const text =
     `${fakeIP} - ${fakeUser} - [${getNginxTimestamp()}] "GET / ${protocol}" ${status} ${fakeSize} "-" "-" "Mozilla/5.0" "${countryLabel}"`;
 
-  const theme = getThemeForGroup(fakeGroup);
+  const theme = getThemeForGroup(fakeGroup, FLAG_THEMES);
 
   // 403 => error-kleur
   let logColor = theme.error;
@@ -1670,48 +1462,22 @@ function generateCurlLines() {
 
   const protocol =
   SESSION.protocolBias === "http2"
-    ? (rand() < 0.7 ? "HTTP/2" : "HTTP/1.1")
-    : (rand() < 0.8 ? "HTTP/1.1" : "HTTP/2");
+    ? (randFloat() < 0.7 ? "HTTP/2" : "HTTP/1.1")
+    : (randFloat() < 0.8 ? "HTTP/1.1" : "HTTP/2");
 
   LAST_PROTOCOL = protocol;
 
     const base = SESSION.latencyBase;
-    const latency = (base + rand() * 20).toFixed(0);
+    const latency = (base + randFloat() * 20).toFixed(0);
 
 
   return [
-    `* Connected to ${DOMAIN || "unknown"}`,
+    `* Connected to ${FULL_DOMAIN || "unknown"}`,
     `> GET / ${protocol || "HTTP/1.1"}`,
-    `> Host: ${DOMAIN || "unknown"}`,
+    `> Host: ${FULL_DOMAIN || "unknown"}`,
     `< ${protocol || "HTTP/1.1"} 403`,
-    `HTTP 403 — Access Forbidden (${latency}ms)`
+    `HTTP 403 - Access Forbidden (${latency}ms)`
   ];
-}
-
-
-async function resolveVisitorIP() {
-  try {
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1500);
-
-    const res = await fetch("ip.php", {
-      cache: "no-store",
-      signal: controller.signal
-    });
-
-    clearTimeout(timeout);
-
-    if (!res.ok) throw new Error("bad response");
-
-    const data = await res.json();
-    VISITOR_IP = data.ip || "0.0.0.0";
-
-  } catch (e) {
-    VISITOR_IP = "0.0.0.0";
-  }
-
-  HOST_LABEL = VISITOR_IP;
 }
 
 function getUserAgent() {
@@ -1751,7 +1517,7 @@ function runTerminal(){
   function createPromptLine(){
     const line = document.createElement("div");
     line.innerHTML =
-      '<span class="userhost">' + SITE_USER + '@' + HOST_LABEL + '</span>'+
+      '<span class="userhost">' + SITE_USER + '@' + getHostLabel() + '</span>'+
       '<span class="colon">:</span>'+
       '<span class="path">~</span>'+
       '<span class="symbol">$ </span>';
@@ -1762,7 +1528,7 @@ function runTerminal(){
 function createRootPromptLine(){
   const line = document.createElement("div");
   line.innerHTML =
-    '<span class="userhost">root@' + DOMAIN + '</span>'+
+    '<span class="userhost">root@' + BASE_DOMAIN + '</span>'+
     '<span class="colon">:</span>'+
     '<span class="path">/var/log</span>'+
     '<span class="symbol"># </span>';
@@ -1786,7 +1552,7 @@ function createRootPromptLine(){
         );
         i++;
         terminalBody.scrollTop = terminalBody.scrollHeight;
-        setTimeout(next, 18 + rand()*25);
+        setTimeout(next, 18 + randFloat()*25);
       } else {
         cursor.remove();
         if(callback) setTimeout(callback,300);
@@ -1817,7 +1583,7 @@ function createRootPromptLine(){
 
       i++;
 
-      const delay = minDelay + rand() * (maxDelay - minDelay);
+      const delay = minDelay + randFloat() * (maxDelay - minDelay);
       setTimeout(next, delay);
     }
 
@@ -1853,7 +1619,7 @@ async function printLines(lines, minDelay = 80, maxDelay = 140){
     terminalOutput.appendChild(row);
     terminalBody.scrollTop = terminalBody.scrollHeight;
 
-    const delay = minDelay + rand() * (maxDelay - minDelay);
+    const delay = minDelay + randFloat() * (maxDelay - minDelay);
     await sleep(delay);
   }
 }
@@ -1863,15 +1629,15 @@ async function runSequence(){
   // 1) USER CONTEXT
   const firstPrompt = createPromptLine();
   await sleep(200);
-  await typeLine(firstPrompt, `ping ${DOMAIN}`);
+  await typeLine(firstPrompt, `ping ${BASE_DOMAIN}`);
 
-  const pingCount = 4;
-  const pingLines = [`PING ${DOMAIN} (${IP_ADDRESS}) 56 data bytes`];
+  const pingCount = 2 + Math.floor(randFloat() * 9); 
+  const pingLines = [`PING ${BASE_DOMAIN} (${IP_ADDRESS}) 56 data bytes`];
   const times = [];
 
   for (let i = 1; i <= pingCount; i++) {
     const base = SESSION.latencyBase;
-    const jitter = (rand() * 4 - 2);
+    const jitter = (randFloat() * 4 - 2);
     const time = parseFloat((base + jitter).toFixed(1));
     times.push(time);
     pingLines.push(`64 bytes from ${IP_ADDRESS}: icmp_seq=${i} ttl=53 time=${time} ms`);
@@ -1884,7 +1650,7 @@ async function runSequence(){
   const mdev = Math.sqrt(variance).toFixed(2);
 
   pingLines.push("^C");
-  pingLines.push(`--- ${DOMAIN} ping statistics ---`);
+  pingLines.push(`--- ${BASE_DOMAIN} ping statistics ---`);
   pingLines.push(`${pingCount} packets transmitted, ${pingCount} received, 0% packet loss`);
   pingLines.push(`rtt min/avg/max/mdev = ${min}/${avg}/${max}/${mdev} ms`);
 
@@ -1892,7 +1658,7 @@ async function runSequence(){
 
   // 2) CURL
   const secondPrompt = createPromptLine();
-  await typeLine(secondPrompt, `curl -v ${DOMAIN}`);
+  await typeLine(secondPrompt, `curl -v ${FULL_DOMAIN}`);
 
   const curlLines = generateCurlLines();
   await printLines(curlLines);
@@ -1908,7 +1674,7 @@ await typeLine(rootPrompt, "tail -n 3 access.log");
 // Zorg dat er al "history" is zodat tail -n 3 altijd iets heeft
 seedAccessLogIfEmpty();
 
-const responseSize = Math.floor(120 + rand() * 80);
+const responseSize = Math.floor(120 + randFloat() * 80);
 
 const tokenPart = CAPTURED_PASSWORD
   ? ` "X-Auth-Token: ${CAPTURED_PASSWORD}"`
@@ -1919,7 +1685,7 @@ const sessionPart = finalSessionId
   : "";
 
 const logLine =
-  `${VISITOR_IP} - ${SITE_USER} - [${getNginxTimestamp()}] "GET / ${LAST_PROTOCOL}" 403 ${responseSize} "-"${tokenPart}${sessionPart} "${getUserAgent()}" "${GROUP_LABELS[NETWORK_GROUP] || NETWORK_GROUP}"`;
+  `${getVisitorIP()} - ${SITE_USER} - [${getNginxTimestamp()}] "GET / ${LAST_PROTOCOL}" 403 ${responseSize} "-"${tokenPart}${sessionPart} "${getUserAgent()}" "${GROUP_LABELS[NETWORK_GROUP] || NETWORK_GROUP}"`;
 
 // voeg toe aan buffer (persist tussen runs)
 pushAccessLog({
@@ -1930,16 +1696,8 @@ pushAccessLog({
 });
 
 // toon echte tail (laatste 3 regels uit buffer)
+const tailLines = getTailLines();
 await printAccessTail(tailLines);
-
-// ===== COPYRIGHT TOEVOEGEN =====
-const copyrightLine = document.createElement("pre");
-copyrightLine.className = "term-line output";
-copyrightLine.style.opacity = "0.6";
-copyrightLine.textContent =
-  "© 2026 SterkBijZiekte.nl — Unauthorized reproduction prohibited.";
-terminalOutput.appendChild(copyrightLine);
-terminalBody.scrollTop = terminalBody.scrollHeight;
 
 // nieuwe prompt
 const finalPrompt = createRootPromptLine();
@@ -1970,7 +1728,7 @@ async function printAccessTail(lines) {
     terminalOutput.appendChild(row);
     terminalBody.scrollTop = terminalBody.scrollHeight;
 
-    const delay = 60 + rand() * 80;
+    const delay = 60 + randFloat() * 80;
     await sleep(delay);
   }
 }
@@ -1982,7 +1740,6 @@ runSequence();
 
 async function resetExperience() {
     reseedWorld();
-  experienceStart = 0;   
 
   lastTime = 0;
 
@@ -1996,7 +1753,6 @@ async function resetExperience() {
 
   curtainPauseStart = 0;
   blackoutStart = 0;
-  phaseStart = 0;
 
 CAPTURED_PASSWORD = null; 
 NETWORK_GROUP = getWeightedGroup();
@@ -2004,7 +1760,13 @@ NETWORK_GROUP = getWeightedGroup();
 applyUILanguage(NETWORK_GROUP);
 
 SESSION = generateSessionProfile();
-generatePolicyDecision();
+generatePolicyDecision({
+  networkGroup: NETWORK_GROUP,
+  session: SESSION,
+  geoRestrictedCountries: GEO_RESTRICTED_COUNTRIES,
+  policyResults: POLICY_RESULTS,
+  randFloat
+});
 
   glitchActive = false;
   terminalGlitchActive = false;
@@ -2021,15 +1783,16 @@ SITE_USER_OBJ = getRandomUserByGroup(USERNAME_GROUP);
 SITE_USER = SITE_USER_OBJ.username;
 
   RANDOM_ASCII =
-    ASCII_FIGURES[Math.floor(rand() * ASCII_FIGURES.length)];
+    ASCII_FIGURES[Math.floor(randFloat() * ASCII_FIGURES.length)];
 
-  const theme = getThemeForGroup(NETWORK_GROUP);
+  const theme = getThemeForGroup(NETWORK_GROUP, FLAG_THEMES);
   applyTheme(theme);
 
   resize();
 
   const isColdBoot = !hasBootedOnce;
     setState(isColdBoot ? STATES.INTRO : STATES.TITLE);
+    experienceStart = performance.now();
 
     document.getElementById("introScreen").style.display =
       hasBootedOnce ? "none" : "flex";
@@ -2041,78 +1804,92 @@ if (!hasBootedOnce) {
 }
 
   // async dingen pas NA reset
-  resolveVisitorIP().then(generateTitleLogs);
+await resolveVisitorIP();
+generateTitleLogs();
 }
 
 /* ===== TAB RETURN SPIKE ===== */
 
 document.addEventListener("visibilitychange", () => {
 
-  if (!document.hidden && (phase === 200 || phase === 300)) {
-    forceSpike = 0.12 + rand() * 0.15;
+  if (!document.hidden && (PHASE.current  === 200 || PHASE.current  === 300)) {
+    forceSpike = 0.12 + randFloat() * 0.15;
   }
 });
 
-/* ================= START ================= */
-
 await resolveVisitorIP();
 generateTitleLogs();
+
+setState(STATES.INTRO);   // <-- TOEVOEGEN
+
 animationId = requestAnimationFrame(render);
 
-const enterBtn = document.getElementById("enterBtn");
+/* ===== Gedeelde startfunctie ===== */
 
-enterBtn.addEventListener("click", async () => {
-  document.body.style.overflow = "hidden"; // pas na intro locken
+async function startExperience() {
 
-  if (phase !== -100) return;
-
+  document.body.style.overflow = "hidden";
   hasBootedOnce = true;
-
   document.getElementById("introScreen").style.display = "none";
 
   // Nieuwe sessie
-    NETWORK_GROUP = getWeightedGroup();
-USERNAME_GROUP = pickUsernameGroup(NETWORK_GROUP);
-SITE_USER_OBJ = getRandomUserByGroup(USERNAME_GROUP);
-SITE_USER = SITE_USER_OBJ.username;
-    applyUILanguage(NETWORK_GROUP);
-    SESSION = generateSessionProfile();
-    generatePolicyDecision();
-
-// Dynamische sessieduur 
-if (SESSION.type === "scripted") {
-  LOOP_DURATION = 31000 + rand() * 10000;     
-}
-else if (SESSION.type === "datacenter") {
-  LOOP_DURATION = 32000 + rand() * 15000;     
-}
-else {
-  LOOP_DURATION = 33000 + rand() * 15000;    
-}
-
+  NETWORK_GROUP  = getWeightedGroup();
   USERNAME_GROUP = pickUsernameGroup(NETWORK_GROUP);
-SITE_USER_OBJ = getRandomUserByGroup(USERNAME_GROUP);
-SITE_USER = SITE_USER_OBJ.username;
+  SITE_USER_OBJ  = getRandomUserByGroup(USERNAME_GROUP);
+  SITE_USER      = SITE_USER_OBJ.username;
+
+  accessLogBuffer = [];
+  seedAccessLogIfEmpty();
+
+  applyUILanguage(NETWORK_GROUP);
+
+  SESSION = generateSessionProfile();
+  generatePolicyDecision({
+  networkGroup: NETWORK_GROUP,
+  session: SESSION,
+  geoRestrictedCountries: GEO_RESTRICTED_COUNTRIES,
+  policyResults: POLICY_RESULTS,
+  randFloat
+});
+
+  // opnieuw sessieduur bepalen bij reset
+  if (SESSION.type === "scripted") {
+    LOOP_DURATION = 29000 + randFloat() * 10000;
+  }
+  else if (SESSION.type === "datacenter") {
+    LOOP_DURATION = 30000 + randFloat() * 15000;
+  }
+  else {
+    LOOP_DURATION = 33500 + randFloat() * 15000;
+  }
 
   RANDOM_ASCII =
-    ASCII_FIGURES[Math.floor(rand() * ASCII_FIGURES.length)];
+    ASCII_FIGURES[Math.floor(randFloat() * ASCII_FIGURES.length)];
 
-  // Theme gebaseerd op group
-  const theme = getThemeForGroup(NETWORK_GROUP);
+  const theme = getThemeForGroup(NETWORK_GROUP, FLAG_THEMES);
   applyTheme(theme);
 
-  // Reset typing state
   typedLength = 0;
   lastTypeTime = 0;
   titleFinished = 0;
 
-  await resolveVisitorIP();
+  // === IP RESOLVE (SINGLE SOURCE) ===
+  if (!isIPResolved()) {
+    await resolveVisitorIP();
+  }
+
+  // fallback als resolve echt mislukt
+  if (!getVisitorIP()) {
+console.warn("IP unresolved, using fallback");
+}
+
   generateTitleLogs();
 
-    experienceStart = performance.now();
-
+  experienceStart = performance.now();
   setState(STATES.TITLE);
-});
+}
+
+/* ===== BACK BUTTON ===== */
 
 const backBtn = document.getElementById("backBtn");
 
@@ -2124,15 +1901,20 @@ backBtn.addEventListener("click", () => {
   }
 });
 
-let LOOP_DURATION = null;
+/* ===== ENTER BUTTON ===== */
+
+const enterBtn = document.getElementById("enterBtn");
+
+if (enterBtn) {
+  enterBtn.addEventListener("click", () => {
+    startExperience();
+  });
+}
 
 })();
-
 </script>
 
-<footer class="copyright">
-  © 2026 S. Veenstra. All rights reserved
-</footer>
 </body>
 </html>
+
 
