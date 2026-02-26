@@ -1,0 +1,402 @@
+/* ===========================
+   BASE TOKENS (safe defaults)
+=========================== */
+:root{
+  --btn-idle: #888;
+  --btn-hover: #fff;
+
+  --color-primary: #888;
+  --color-secondary: #fff;
+  --color-tertiary: #ccc;
+  --color-error: #ff4d4d;
+
+--ui-primary: var(--color-primary);
+--ui-secondary: var(--color-secondary);
+--ui-tertiary: var(--color-tertiary);
+
+  --ui-primary-safe: var(--color-primary);
+
+  --terminal-font: 14px;
+  --terminal-header-font: 12px;
+  --status-font: 11px;
+  --button-font: 14px;
+}
+
+.theme-guard-black{
+  --ui-primary-safe:#d0d0d0;
+}
+
+/* ===========================
+   GLOBAL
+=========================== */
+html,body{
+  margin:0;
+  padding:0;
+  height:100%;
+  overflow:hidden;
+  background:#050505;
+  font-family:"IBM Plex Mono","Noto Sans JP",monospace;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* Canvas overlay */
+canvas{
+  position:fixed;
+  inset:0;
+  z-index:4;
+  pointer-events:none;
+}
+
+/* ===========================
+   STATUS + BUTTONS (shared)
+=========================== */
+.status{
+  position:fixed;
+  top:18px;
+  left:28px;
+  font-size:11px;
+  letter-spacing:3px;
+  color:rgba(200,200,200,.45);
+  z-index:9;
+}
+
+.back-button,
+#enterBtn{
+  border:1px solid var(--btn-idle);
+  color:var(--btn-idle);
+  background:rgba(0,0,0,.75);
+  backdrop-filter:blur(6px);
+  transition:.25s ease;
+  cursor:pointer;
+}
+
+/* Alleen de enter-knop pulseert */
+#enterBtn{
+  animation:forbiddenPulse 2.4s ease-in-out infinite;
+}
+
+.back-button:hover,
+#enterBtn:hover{
+  animation:none;
+  background:rgba(15,15,15,.9);
+  border-color:var(--btn-hover);
+  color:var(--btn-hover);
+  box-shadow:0 0 20px var(--btn-hover);
+}
+
+@keyframes forbiddenPulse{
+  0%   { box-shadow:0 0 0 transparent; }
+  50%  { box-shadow:0 0 18px var(--btn-idle); }
+  100% { box-shadow:0 0 0 transparent; }
+}
+
+/* Back button: default (global, fixed) */
+.back-button{
+  position:fixed;
+  bottom:18px;
+  right:24px;
+  padding:6px 12px;
+  font-size:11px;
+  letter-spacing:2px;
+  z-index:12;
+}
+
+/* ===========================
+   INTRO 
+=========================== */
+
+.intro-screen{
+  position:fixed;
+  inset:0;
+  display:flex;
+    flex-direction: column; 
+  align-items:center;
+  justify-content:center;
+  z-index:11;
+  visibility:hidden;
+}
+
+.intro-screen.ready{
+  visibility:visible;
+}
+
+#enterBtn{
+  display:inline-block;
+  padding:16px 32px;
+  font-size:14px;
+  letter-spacing:3px;
+  width:auto;
+  max-width:90vw;
+}
+
+.intro-title {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 18px;
+  letter-spacing: 2px;
+  margin-bottom: 24px;
+  color: var(--ui-tertiary);
+  text-transform: uppercase;
+}
+
+.intro-title::before {
+  content: "> ";
+  color: var(--color-secondary);
+}
+
+.event-banner{
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  padding: 8px 10px;
+  text-align: center;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  letter-spacing: 0.4px;
+  background: rgba(140, 0, 0, 0.92);
+  color: #fff;
+  z-index: 9999;
+  user-select: none;
+}
+
+.hidden{ display: none; }
+
+
+/* ===========================
+   TERMINAL
+=========================== */
+.terminal{
+  position:fixed;
+  inset:0;
+  margin:auto;
+
+  width:min(92vw,880px);
+  min-width:320px;
+  height:min(60dvh,700px);
+  max-height:90vh;
+
+  background:rgba(14,18,14,.48);
+  border:1px solid rgba(255,255,255,.06);
+  backdrop-filter:blur(10px);
+
+  display:flex;
+  flex-direction:column;
+
+  box-shadow:0 40px 120px rgba(0,0,0,.85);
+  z-index:10;
+
+  opacity:0;
+  transform:none;
+  transition:opacity .4s ease;
+}
+
+.terminal.open{
+  opacity:1;
+  transform:scale(1);
+}
+
+@media (max-width:768px){
+  .terminal{
+    width:92vw;
+    height:60vh;
+  }
+}
+
+.terminal-header{
+  height:36px;
+  display:flex;
+  align-items:center;
+  padding:0 12px;
+  font-size:12px;
+  color:rgba(220,220,220,.75);
+  border-bottom:1px solid rgba(0,0,0,.6);
+}
+
+.window-buttons{
+  display:flex;
+  gap:8px;
+}
+
+.window-buttons span{
+  width:11px;
+  height:11px;
+  border-radius:50%;
+}
+
+.close{background:#ff5f56;}
+.minimize{background:#ffbd2e;}
+.maximize{background:#27c93f;}
+
+.terminal-title{
+  flex:1;
+  text-align:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.terminal-body{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  font-size:14px;
+  line-height:1.55;
+  color:#e8e8e8;
+}
+
+.terminal-output{
+  padding:12px 18px 40px 18px;
+}
+
+.term-line{
+  margin:0;
+  font:inherit;
+  white-space:pre-wrap;
+  padding:0;
+  line-height:1.4;
+}
+
+/* Terminal colors */
+.userhost{color:#00ff00;}
+.colon{color:#fff;}
+.path{color:#4da6ff;}
+.symbol{color:#fff;}
+.output{color:#ddd;}
+.error{color:var(--color-error);}
+
+.cursor{
+  display:inline-block;
+  width:8px;
+  height:1em;
+  background:#e8e8e8;
+  margin-left:2px;
+  transform:translateY(.15em);
+}
+
+.terminal-body {
+  font-size: var(--terminal-font);
+}
+
+.terminal-header {
+  font-size: var(--terminal-header-font);
+}
+
+.status {
+  font-size: var(--status-font);
+}
+
+#enterBtn {
+  font-size: var(--button-font);
+}
+
+
+
+/* ===========================
+   TV / LARGE SCREEN SCALE
+=========================== */
+
+@media (min-width: 1600px) {
+
+  .terminal {
+    width: min(90vw, 1100px);
+    height: min(70vh, 820px);
+  }
+
+  .terminal-header {
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .terminal-body {
+    font-size: 18px;
+  }
+
+  .status {
+    font-size: 14px;
+  }
+
+  #enterBtn {
+    font-size: 18px;
+    padding: 20px 40px;
+  }
+
+  .back-button {
+    font-size: 14px;
+    padding: 10px 18px;
+  }
+
+  .input-panel {
+    width: min(520px, 92vw);
+  }
+
+  #traceInput {
+    font-size: 22px;
+  }
+
+  canvas {
+    transform: scale(1.2);  
+    transform-origin: top left;
+  }
+}
+
+@media (min-width: 1800px) {
+
+  :root {
+    --terminal-font: 20px;
+    --terminal-header-font: 16px;
+    --status-font: 14px;
+    --button-font: 20px;
+  }
+
+  .terminal {
+    width: min(88vw, 1300px);
+    height: min(75vh, 900px);
+  }
+
+  .input-panel {
+    width: min(600px, 92vw);
+  }
+
+  #traceInput {
+    font-size: 26px;
+}
+}
+
+@media (min-width: 2400px) {
+
+  .terminal-body {
+    font-size: 22px;
+  }
+
+  .terminal-header {
+    font-size: 18px;
+  }
+
+  #enterBtn {
+    font-size: 22px;
+  }
+
+  canvas {
+    transform: scale(1.8);
+    transform-origin: top left;
+  }
+}
+
+@media (min-width: 2600px) {
+
+  :root {
+    --terminal-font: 26px;
+    --terminal-header-font: 20px;
+    --status-font: 18px;
+    --button-font: 26px;
+  }
+
+  .terminal {
+    width: min(85vw, 1600px);
+    height: min(80vh, 1100px);
+  }
+
+  #traceInput {
+    font-size: 32px;
+  }
+}
